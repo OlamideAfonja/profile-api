@@ -17,6 +17,8 @@ app.use((req, res, next) => {
   next();
 });
 
+try {
+  // logic
 // ─── Database Setup ────────────────────────────────────────────────────────────
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -65,6 +67,8 @@ async function fetchJson(url) {
 app.post("/api/profiles", async (req, res) => {
   const { name } = req.body;
 
+  res.status(201).json(result.rows[0]);
+  
   if (name === undefined || name === null || name === "") {
     return apiError(res, 400, "Missing or empty name");
   }
@@ -212,6 +216,11 @@ app.use((req, res) => apiError(res, 404, "Route not found"));
 if (require.main === module) {
   const PORT = process.env.PORT || 3000;
   app.listen(PORT, () => console.log(`✅ Profile API running on port ${PORT}`));
+}
+
+} catch (err) {
+  console.error(err);
+  res.status(500).json({ error: "Server error" });
 }
 
 module.exports = app;
