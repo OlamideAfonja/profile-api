@@ -2,7 +2,7 @@
 
 A REST API that enriches a name with gender, age, and nationality data from three public APIs, then stores and serves the result.
 
-## Tech Stack
+## Tech Stacks
 
 - **Runtime:** Node.js 18+
 - **Framework:** Express.js
