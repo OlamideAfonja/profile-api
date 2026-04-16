@@ -4,7 +4,7 @@ const { v7: uuidv7 } = require("uuid");
 
 const app = express();
 
-// ─── CORS — must be first, before any other middleware ────────────────────────
+// ─── CORS — first, before everything ─────────────────────────────────────────
 app.use((req, res, next) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
@@ -15,33 +15,59 @@ app.use((req, res, next) => {
 
 app.use(express.json());
 
-// ─── Database — lazy singleton so module load never crashes ───────────────────
+// ─── Health check — no DB needed, confirms server is alive ───────────────────
+app.get("/", (req, res) => {
+  res.json({ status: "ok", message: "Profile API is running" });
+});
+
+app.get("/health", (req, res) => {
+  res.json({
+    status: "ok",
+    db_url_set: !!process.env.DATABASE_URL,
+    node_env: process.env.NODE_ENV || "not set",
+  });
+});
+
+// ─── Database — lazy singleton ────────────────────────────────────────────────
 let pool;
+
 function getPool() {
   if (!pool) {
+    if (!process.env.DATABASE_URL) {
+      throw new Error("DATABASE_URL environment variable is not set");
+    }
     pool = new Pool({
       connectionString: process.env.DATABASE_URL,
       ssl: { rejectUnauthorized: false },
+      connectionTimeoutMillis: 10000,
+      idleTimeoutMillis: 30000,
+      max: 3,
     });
   }
   return pool;
 }
 
+let dbReady = false;
 async function initDB() {
-  await getPool().query(`
-    CREATE TABLE IF NOT EXISTS profiles (
-      id                  TEXT PRIMARY KEY,
-      name                TEXT UNIQUE NOT NULL,
-      gender              TEXT NOT NULL,
-      gender_probability  REAL NOT NULL,
-      sample_size         INTEGER NOT NULL,
-      age                 INTEGER NOT NULL,
-      age_group           TEXT NOT NULL,
-      country_id          TEXT NOT NULL,
-      country_probability REAL NOT NULL,
-      created_at          TEXT NOT NULL
-    )
-  `);
+  const db = getPool();
+  if (!dbReady) {
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS public.profiles (
+        id                  TEXT PRIMARY KEY,
+        name                TEXT UNIQUE NOT NULL,
+        gender              TEXT NOT NULL,
+        gender_probability  REAL NOT NULL,
+        sample_size         INTEGER NOT NULL,
+        age                 INTEGER NOT NULL,
+        age_group           TEXT NOT NULL,
+        country_id          TEXT NOT NULL,
+        country_probability REAL NOT NULL,
+        created_at          TEXT NOT NULL
+      )
+    `);
+    dbReady = true;
+  }
+  return db;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -66,9 +92,15 @@ async function fetchJson(url) {
 
 // POST /api/profiles
 app.post("/api/profiles", async (req, res) => {
+  let db;
   try {
-    await initDB();
-    const db = getPool();
+    db = await initDB();
+  } catch (err) {
+    console.error("DB init failed:", err.message);
+    return apiError(res, 500, `Database connection failed: ${err.message}`);
+  }
+
+  try {
     const { name } = req.body;
 
     if (name === undefined || name === null || name === "") {
@@ -104,7 +136,6 @@ app.post("/api/profiles", async (req, res) => {
       return apiError(res, 502, "An external API returned an invalid response");
     }
 
-    // Validate each API response
     if (!genderData.gender || genderData.count === 0) {
       return apiError(res, 502, "Genderize returned an invalid response");
     }
@@ -152,24 +183,28 @@ app.post("/api/profiles", async (req, res) => {
           data: race.rows[0],
         });
       }
-      console.error("Insert error:", err);
+      console.error("Insert error:", err.message);
       return apiError(res, 500, "Failed to save profile");
     }
 
     return res.status(201).json({ status: "success", data: profile });
   } catch (err) {
-    console.error("POST /api/profiles error:", err);
-    return apiError(res, 500, "Internal server error");
+    console.error("POST /api/profiles unhandled:", err.message);
+    return apiError(res, 500, err.message);
   }
 });
 
 // GET /api/profiles
 app.get("/api/profiles", async (req, res) => {
+  let db;
   try {
-    await initDB();
-    const db = getPool();
-    const { gender, country_id, age_group } = req.query;
+    db = await initDB();
+  } catch (err) {
+    return apiError(res, 500, `Database connection failed: ${err.message}`);
+  }
 
+  try {
+    const { gender, country_id, age_group } = req.query;
     const conditions = [];
     const params = [];
 
@@ -198,51 +233,57 @@ app.get("/api/profiles", async (req, res) => {
       data: result.rows,
     });
   } catch (err) {
-    console.error("GET /api/profiles error:", err);
-    return apiError(res, 500, "Internal server error");
+    console.error("GET /api/profiles unhandled:", err.message);
+    return apiError(res, 500, err.message);
   }
 });
 
 // GET /api/profiles/:id
 app.get("/api/profiles/:id", async (req, res) => {
+  let db;
   try {
-    await initDB();
-    const result = await getPool().query(
-      "SELECT * FROM profiles WHERE id = $1",
-      [req.params.id]
-    );
+    db = await initDB();
+  } catch (err) {
+    return apiError(res, 500, `Database connection failed: ${err.message}`);
+  }
+
+  try {
+    const result = await db.query("SELECT * FROM profiles WHERE id = $1", [req.params.id]);
     if (result.rows.length === 0) {
       return apiError(res, 404, "Profile not found");
     }
     return res.status(200).json({ status: "success", data: result.rows[0] });
   } catch (err) {
-    console.error("GET /api/profiles/:id error:", err);
-    return apiError(res, 500, "Internal server error");
+    console.error("GET /api/profiles/:id unhandled:", err.message);
+    return apiError(res, 500, err.message);
   }
 });
 
 // DELETE /api/profiles/:id
 app.delete("/api/profiles/:id", async (req, res) => {
+  let db;
   try {
-    await initDB();
-    const result = await getPool().query(
-      "DELETE FROM profiles WHERE id = $1",
-      [req.params.id]
-    );
+    db = await initDB();
+  } catch (err) {
+    return apiError(res, 500, `Database connection failed: ${err.message}`);
+  }
+
+  try {
+    const result = await db.query("DELETE FROM profiles WHERE id = $1", [req.params.id]);
     if (result.rowCount === 0) {
       return apiError(res, 404, "Profile not found");
     }
     return res.status(204).end();
   } catch (err) {
-    console.error("DELETE /api/profiles/:id error:", err);
-    return apiError(res, 500, "Internal server error");
+    console.error("DELETE /api/profiles/:id unhandled:", err.message);
+    return apiError(res, 500, err.message);
   }
 });
 
-// 404 catch-all
+// 404
 app.use((req, res) => apiError(res, 404, "Route not found"));
 
-// ─── Local dev ────────────────────────────────────────────────────────────────
+// Local dev
 if (require.main === module) {
   const PORT = process.env.PORT || 3000;
   app.listen(PORT, () => console.log(`✅ Profile API running on port ${PORT}`));
