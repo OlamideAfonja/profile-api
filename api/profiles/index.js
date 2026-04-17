@@ -20,7 +20,7 @@ export default async function handler(req, res) {
       return res.status(200).json({
         status: "success",
         count: result.rows.length,
-        data: result.rows,
+        data: result.rows
       });
     }
 
@@ -28,10 +28,7 @@ export default async function handler(req, res) {
       const { name } = req.body || {};
 
       if (!name || typeof name !== "string") {
-        return res.status(400).json({
-          status: "error",
-          message: "Invalid name",
-        });
+        return res.status(400).json({ status: "error", message: "Invalid name" });
       }
 
       const trimmedName = name.trim().toLowerCase();
@@ -45,7 +42,7 @@ export default async function handler(req, res) {
         return res.status(200).json({
           status: "success",
           message: "Profile already exists",
-          data: existing.rows[0],
+          data: existing.rows[0]
         });
       }
 
@@ -55,61 +52,32 @@ export default async function handler(req, res) {
         safeFetch(`https://api.nationalize.io?name=${encodeURIComponent(trimmedName)}`)
       ]);
 
-      const gender = genderData?.gender || null;
-      const gender_probability = genderData?.probability || 0;
-      const sample_size = genderData?.count || 0;
-
-      const age = ageData?.age ?? null;
-      const age_group = getAgeGroup(age);
-
-      const topCountry = natData?.country?.[0] || {};
-      const country_id = topCountry.country_id || null;
-      const country_probability = topCountry.probability || 0;
-
       const profile = {
         id: uuidv7(),
         name: trimmedName,
-        gender,
-        gender_probability,
-        sample_size,
-        age,
-        age_group,
-        country_id,
-        country_probability,
-        created_at: new Date().toISOString(),
+        gender: genderData?.gender || null,
+        gender_probability: genderData?.probability || 0,
+        sample_size: genderData?.count || 0,
+        age: ageData?.age ?? null,
+        age_group: getAgeGroup(ageData?.age ?? null),
+        country_id: natData?.country?.[0]?.country_id || null,
+        country_probability: natData?.country?.[0]?.probability || 0,
+        created_at: new Date().toISOString()
       };
 
       await pool.query(
         `INSERT INTO profiles 
         (id, name, gender, gender_probability, sample_size, age, age_group, country_id, country_probability, created_at)
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-        [
-          profile.id,
-          profile.name,
-          profile.gender,
-          profile.gender_probability,
-          profile.sample_size,
-          profile.age,
-          profile.age_group,
-          profile.country_id,
-          profile.country_probability,
-          profile.created_at,
-        ]
+        Object.values(profile)
       );
 
-      return res.status(201).json({
-        status: "success",
-        data: profile,
-      });
+      return res.status(201).json({ status: "success", data: profile });
     }
 
     return res.status(405).json({ message: "Method Not Allowed" });
 
   } catch (err) {
-    console.error(err);
-    return res.status(500).json({
-      status: "error",
-      message: "Internal Server Error",
-    });
+    return res.status(500).json({ status: "error", message: "Internal Server Error" });
   }
 }
