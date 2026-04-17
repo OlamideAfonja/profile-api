@@ -80,12 +80,23 @@ export default async function handler(req, res) {
         created_at: new Date().toISOString()
       };
 
-      await pool.query(
-        `INSERT INTO profiles 
-        (id, name, gender, gender_probability, sample_size, age, age_group, country_id, country_probability, created_at)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-        Object.values(profile)
-      );
+   await pool.query(
+  `INSERT INTO profiles 
+  (id, name, gender, gender_probability, sample_size, age, age_group, country_id, country_probability, created_at)
+  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+  [
+    profile.id,
+    profile.name,
+    profile.gender,
+    profile.gender_probability,
+    profile.sample_size,
+    profile.age,
+    profile.age_group,
+    profile.country_id,
+    profile.country_probability,
+    profile.created_at
+  ]
+);
 
       return res.status(201).json({
         status: "success",
