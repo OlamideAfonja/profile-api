@@ -13,39 +13,31 @@ export default async function handler(req, res) {
 
   try {
     // GET all profiles
-if (req.method === "GET") {
-  const { gender, age_group, country_id } = req.query;
+    if (req.method === "GET") {
+      const { gender, age_group, country_id } = req.query;
+      let query = "SELECT id, name, gender, age, age_group, country_id FROM profiles";
+      const params = [];
+      const conditions = [];
 
-  let query = "SELECT id, name, gender, age, age_group, country_id FROM profiles";
-  const params = [];
-  const conditions = [];
+      if (gender) {
+        params.push(gender.toLowerCase());
+        conditions.push(`LOWER(gender) = $${params.length}`);
+      }
+      if (age_group) {
+        params.push(age_group.toLowerCase());
+        conditions.push(`LOWER(age_group) = $${params.length}`);
+      }
+      if (country_id) {
+        params.push(country_id.toUpperCase());
+        conditions.push(`UPPER(country_id) = $${params.length}`);
+      }
 
-  if (gender) {
-    params.push(gender.toLowerCase());
-    conditions.push(`LOWER(gender) = $${params.length}`);
-  }
-  if (age_group) {
-    params.push(age_group.toLowerCase());
-    conditions.push(`LOWER(age_group) = $${params.length}`);
-  }
-  if (country_id) {
-    params.push(country_id.toUpperCase());
-    conditions.push(`UPPER(country_id) = $${params.length}`);
-  }
+      if (conditions.length > 0) {
+        query += " WHERE " + conditions.join(" AND ");
+      }
 
-  if (conditions.length > 0) {
-    query += " WHERE " + conditions.join(" AND ");
-  }
-
-  const result = await pool.query(query, params);
-  res.setHeader("Cache-Control", "no-store");
-  return res.status(200).json({
-    status: "success",
-    count: result.rows.length,
-    data: result.rows
-  });
-}     
-      
+      const result = await pool.query(query, params);
+      res.setHeader("Cache-Control", "no-store");
       return res.status(200).json({
         status: "success",
         count: result.rows.length,
@@ -57,12 +49,12 @@ if (req.method === "GET") {
     if (req.method === "POST") {
       const { name } = req.body || {};
 
-    if (typeof name !== "string") {
-  return res.status(422).json({ status: "error", message: "name must be a string" });
-}
-    if (!name.trim()) {
-  return res.status(400).json({ status: "error", message: "name is required" });
-}
+      if (typeof name !== "string") {
+        return res.status(422).json({ status: "error", message: "name must be a string" });
+      }
+      if (!name.trim()) {
+        return res.status(400).json({ status: "error", message: "name is required" });
+      }
 
       const trimmedName = name.trim().toLowerCase();
 
@@ -70,7 +62,6 @@ if (req.method === "GET") {
         "SELECT * FROM profiles WHERE name=$1",
         [trimmedName]
       );
-
       if (existing.rows.length > 0) {
         return res.status(200).json({
           status: "success",
@@ -80,59 +71,12 @@ if (req.method === "GET") {
       }
 
       const [genderData, ageData, natData] = await Promise.all([
-        safeFetch(
-          `https://api.genderize.io?name=${encodeURIComponent(trimmedName)}`
-        ),
-        safeFetch(
-          `https://api.agify.io?name=${encodeURIComponent(trimmedName)}`
-        ),
-        safeFetch(
-          `https://api.nationalize.io?name=${encodeURIComponent(trimmedName)}`
-        )
+        safeFetch(`https://api.genderize.io?name=${encodeURIComponent(trimmedName)}`),
+        safeFetch(`https://api.agify.io?name=${encodeURIComponent(trimmedName)}`),
+        safeFetch(`https://api.nationalize.io?name=${encodeURIComponent(trimmedName)}`)
       ]);
 
       const age = ageData?.age ?? null;
-
       const profile = {
         id: randomUUID(),
-        name: trimmedName,
-        gender: genderData?.gender || null,
-        gender_probability: genderData?.probability || 0,
-        sample_size: genderData?.count || 0,
-        age,
-        age_group: getAgeGroup(age),
-        country_id: natData?.country?.[0]?.country_id || null,
-        country_probability: natData?.country?.[0]?.probability || 0,
-        created_at: new Date().toISOString()
-      };
-
-   await pool.query(
-  `INSERT INTO profiles 
-  (id, name, gender, gender_probability, sample_size, age, age_group, country_id, country_probability, created_at)
-  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-  [
-    profile.id,
-    profile.name,
-    profile.gender,
-    profile.gender_probability,
-    profile.sample_size,
-    profile.age,
-    profile.age_group,
-    profile.country_id,
-    profile.country_probability,
-    profile.created_at
-  ]
-);
-
-      return res.status(201).json({
-        status: "success",
-        data: profile
-      });
-    }
-
-    return res.status(405).json({ message: "Method Not Allowed" });
-  } catch (err) {
-  console.error(err); // keep this
-  res.status(500).json({ status: "error", message: err.message }); // expose real error
-  }
-}
+        name: trimmedNa
