@@ -13,11 +13,37 @@ export default async function handler(req, res) {
 
   try {
     // GET all profiles
-    if (req.method === "GET") {
-      const result = await pool.query(
-        "SELECT id, name, gender, age, age_group, country_id FROM profiles"
-      );
+   if (req.method === "GET") {
+  const { gender, age_group, country_id } = req.query;
 
+  let query = "SELECT id, name, gender, age, age_group, country_id FROM profiles";
+  const params = [];
+  const conditions = [];
+
+  if (gender) {
+    params.push(gender.toLowerCase());
+    conditions.push(`LOWER(gender) = $${params.length}`);
+  }
+  if (age_group) {
+    params.push(age_group.toLowerCase());
+    conditions.push(`LOWER(age_group) = $${params.length}`);
+  }
+  if (country_id) {
+    params.push(country_id.toUpperCase());
+    conditions.push(`UPPER(country_id) = $${params.length}`);
+  }
+
+  if (conditions.length > 0) {
+    query += " WHERE " + conditions.join(" AND ");
+  }
+
+  const result = await pool.query(query, params);
+  res.setHeader("Cache-Control", "no-store");  return res.status(200).json({
+    status: "success",
+    count: result.rows.length,
+    data: result.rows
+  });
+}
       res.setHeader("Cache-Control", "s-maxage=60, stale-while-revalidate");
 
       return res.status(200).json({
