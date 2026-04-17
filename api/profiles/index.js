@@ -1,5 +1,4 @@
 import { getAgeGroup, safeFetch } from "../../lib/utils.js";
-import { getAgeGroup, safeFetch } from "../../lib/utils";
 import { v7 as uuidv7 } from "uuid";
 
 export default async function handler(req, res) {
