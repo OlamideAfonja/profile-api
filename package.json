@@ -1,5 +1,5 @@
 {
-  "name": "vercel-profile-api",
+  "name": "profile-api",
   "version": "1.0.0",
   "type": "module",
   "dependencies": {
