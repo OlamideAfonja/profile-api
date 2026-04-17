@@ -1,14 +1,17 @@
 import { getAgeGroup, safeFetch } from "../../lib/utils.js";
-import { v7 as uuidv7 } from "uuid";
+import { randomUUID } from "crypto";
 
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
-  if (req.method === "OPTIONS") return res.status(204).end();
+  if (req.method === "OPTIONS") {
+    return res.status(204).end();
+  }
 
   try {
+    // GET all profiles
     if (req.method === "GET") {
       const result = await pool.query(
         "SELECT id, name, gender, age, age_group, country_id FROM profiles"
@@ -23,11 +26,15 @@ export default async function handler(req, res) {
       });
     }
 
+    // CREATE profile
     if (req.method === "POST") {
       const { name } = req.body || {};
 
       if (!name || typeof name !== "string") {
-        return res.status(400).json({ status: "error", message: "Invalid name" });
+        return res.status(400).json({
+          status: "error",
+          message: "Invalid name"
+        });
       }
 
       const trimmedName = name.trim().toLowerCase();
@@ -46,19 +53,27 @@ export default async function handler(req, res) {
       }
 
       const [genderData, ageData, natData] = await Promise.all([
-        safeFetch(`https://api.genderize.io?name=${encodeURIComponent(trimmedName)}`),
-        safeFetch(`https://api.agify.io?name=${encodeURIComponent(trimmedName)}`),
-        safeFetch(`https://api.nationalize.io?name=${encodeURIComponent(trimmedName)}`)
+        safeFetch(
+          `https://api.genderize.io?name=${encodeURIComponent(trimmedName)}`
+        ),
+        safeFetch(
+          `https://api.agify.io?name=${encodeURIComponent(trimmedName)}`
+        ),
+        safeFetch(
+          `https://api.nationalize.io?name=${encodeURIComponent(trimmedName)}`
+        )
       ]);
 
+      const age = ageData?.age ?? null;
+
       const profile = {
-        id: uuidv7(),
+        id: randomUUID(),
         name: trimmedName,
         gender: genderData?.gender || null,
         gender_probability: genderData?.probability || 0,
         sample_size: genderData?.count || 0,
-        age: ageData?.age ?? null,
-        age_group: getAgeGroup(ageData?.age ?? null),
+        age,
+        age_group: getAgeGroup(age),
         country_id: natData?.country?.[0]?.country_id || null,
         country_probability: natData?.country?.[0]?.probability || 0,
         created_at: new Date().toISOString()
@@ -71,12 +86,17 @@ export default async function handler(req, res) {
         Object.values(profile)
       );
 
-      return res.status(201).json({ status: "success", data: profile });
+      return res.status(201).json({
+        status: "success",
+        data: profile
+      });
     }
 
     return res.status(405).json({ message: "Method Not Allowed" });
-
   } catch (err) {
-    return res.status(500).json({ status: "error", message: "Internal Server Error" });
+    return res.status(500).json({
+      status: "error",
+      message: "Internal Server Error"
+    });
   }
 }
