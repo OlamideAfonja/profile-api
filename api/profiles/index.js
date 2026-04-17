@@ -79,4 +79,38 @@ export default async function handler(req, res) {
       const age = ageData?.age ?? null;
       const profile = {
         id: randomUUID(),
-        name: trimmedNa
+        name: trimmedName,
+        gender: genderData?.gender || null,
+        gender_probability: genderData?.probability || 0,
+        sample_size: genderData?.count || 0,
+        age,
+        age_group: getAgeGroup(age),
+        country_id: natData?.country?.[0]?.country_id || null,
+        country_probability: natData?.country?.[0]?.probability || 0,
+        created_at: new Date().toISOString()
+      };
+
+      await pool.query(
+        `INSERT INTO profiles 
+        (id, name, gender, gender_probability, sample_size, age, age_group, country_id, country_probability, created_at)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+        [
+          profile.id, profile.name, profile.gender, profile.gender_probability,
+          profile.sample_size, profile.age, profile.age_group,
+          profile.country_id, profile.country_probability, profile.created_at
+        ]
+      );
+
+      return res.status(201).json({
+        status: "success",
+        data: profile
+      });
+    }
+
+    return res.status(405).json({ message: "Method Not Allowed" });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ status: "error", message: err.message });
+  }
+}
