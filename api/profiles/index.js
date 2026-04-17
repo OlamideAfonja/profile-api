@@ -31,12 +31,12 @@ export default async function handler(req, res) {
     if (req.method === "POST") {
       const { name } = req.body || {};
 
-      if (!name || typeof name !== "string") {
-        return res.status(400).json({
-          status: "error",
-          message: "Invalid name"
-        });
-      }
+    if (typeof name !== "string") {
+  return res.status(422).json({ status: "error", message: "name must be a string" });
+}
+    if (!name.trim()) {
+  return res.status(400).json({ status: "error", message: "name is required" });
+}
 
       const trimmedName = name.trim().toLowerCase();
 
@@ -108,4 +108,5 @@ export default async function handler(req, res) {
   } catch (err) {
   console.error(err); // keep this
   res.status(500).json({ status: "error", message: err.message }); // expose real error
+  }
 }
